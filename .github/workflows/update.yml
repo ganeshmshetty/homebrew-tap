@@ -16,17 +16,33 @@ jobs:
 
       - name: Fetch latest release from Mirin repo
         id: get_release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          RELEASE_DATA=$(curl -s https://api.github.com/repos/ganeshmshetty/mirin/releases/latest)
+          RELEASE_DATA=$(curl -fsSL \
+            -u "x-access-token:${GH_TOKEN}" \
+            https://api.github.com/repos/ganeshmshetty/mirin/releases/latest)
           VERSION_TAG=$(echo "$RELEASE_DATA" | jq -r '.tag_name')
           VERSION=${VERSION_TAG#v}
+
+          if [ -z "$VERSION_TAG" ] || [ "$VERSION_TAG" = "null" ]; then
+            echo "Unable to read latest release tag from GitHub API response"
+            echo "$RELEASE_DATA"
+            exit 1
+          fi
           
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TAG=$VERSION_TAG" >> $GITHUB_OUTPUT
           
           # Find asset URLs
-          ARM_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name | contains("aarch64.dmg")) | .browser_download_url')
-          X64_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[] | select(.name | contains("x64.dmg")) | .browser_download_url')
+          ARM_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[]? | select(.name | contains("aarch64.dmg")) | .browser_download_url')
+          X64_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[]? | select(.name | contains("x64.dmg")) | .browser_download_url')
+
+          if [ -z "$ARM_URL" ] || [ -z "$X64_URL" ]; then
+            echo "Unable to find both release assets in GitHub API response"
+            echo "$RELEASE_DATA"
+            exit 1
+          fi
           
           echo "ARM_URL=$ARM_URL" >> $GITHUB_ENV
           echo "X64_URL=$X64_URL" >> $GITHUB_ENV
