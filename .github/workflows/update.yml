@@ -1,12 +1,15 @@
-name: Auto-update Cask
+name: Auto-update Casks
 
 on:
   schedule:
     - cron: '*/30 * * * *' # Check every 30 minutes
+  repository_dispatch:
+    types: [update-remotectrl-cask]
   workflow_dispatch: # Allow manual trigger
 
 jobs:
-  update-cask:
+  update-mirin:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,72 +35,22 @@ jobs:
           fi
           
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "TAG=$VERSION_TAG" >> $GITHUB_OUTPUT
           
-          # Find asset URLs
-          ARM_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[]? | select(.name | contains("aarch64.dmg")) | .browser_download_url')
-          X64_URL=$(echo "$RELEASE_DATA" | jq -r '.assets[]? | select(.name | contains("x64.dmg")) | .browser_download_url')
-
-          if [ -z "$ARM_URL" ] || [ -z "$X64_URL" ]; then
-            echo "Unable to find both release assets in GitHub API response"
-            echo "$RELEASE_DATA"
-            exit 1
-          fi
-          
-          echo "ARM_URL=$ARM_URL" >> $GITHUB_ENV
-          echo "X64_URL=$X64_URL" >> $GITHUB_ENV
 
       - name: Check if update is needed
         id: check
         run: |
           CURRENT_VERSION=$(grep -E 'version "' Casks/mirin.rb | sed -E 's/.*version "([^"]+)".*/\1/')
-          echo "Current: $CURRENT_VERSION, Latest: ${{ steps.get_release.outputs.VERSION }}"
           if [ "$CURRENT_VERSION" = "${{ steps.get_release.outputs.VERSION }}" ]; then
             echo "UPDATED=false" >> $GITHUB_OUTPUT
           else
             echo "UPDATED=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Download binaries and calculate SHA256
+      - name: Update Cask Version
         if: steps.check.outputs.UPDATED == 'true'
         run: |
-          curl -L -o mirin_arm.dmg ${{ env.ARM_URL }}
-          curl -L -o mirin_x64.dmg ${{ env.X64_URL }}
-          
-          SHA_ARM=$(sha256sum mirin_arm.dmg | awk '{print $1}')
-          SHA_X64=$(sha256sum mirin_x64.dmg | awk '{print $1}')
-          
-          echo "SHA_ARM=$SHA_ARM" >> $GITHUB_ENV
-          echo "SHA_X64=$SHA_X64" >> $GITHUB_ENV
-
-      - name: Update Cask File
-        if: steps.check.outputs.UPDATED == 'true'
-        run: |
-          cat << EOF > Casks/mirin.rb
-          cask "mirin" do
-            version "${{ steps.get_release.outputs.VERSION }}"
-
-            if Hardware::CPU.intel?
-              sha256 "${{ env.SHA_X64 }}"
-              url "https://github.com/ganeshmshetty/mirin/releases/download/v#{version}/Mirin_#{version}_x64.dmg"
-            else
-              sha256 "${{ env.SHA_ARM }}"
-              url "https://github.com/ganeshmshetty/mirin/releases/download/v#{version}/Mirin_#{version}_aarch64.dmg"
-            end
-
-            name "Mirin"
-            desc "Modern intuitive screen mirroring interface for Android (scrcpy)"
-            homepage "https://github.com/ganeshmshetty/mirin"
-
-            app "Mirin.app"
-
-            zap trash: [
-              "~/Library/Application Support/com.mirin.gui",
-              "~/Library/Preferences/com.mirin.gui.plist",
-              "~/Library/Saved Application State/com.mirin.gui.savedState",
-            ]
-          end
-          EOF
+          sed -i -E "s/version \".*\"/version \"${{ steps.get_release.outputs.VERSION }}\"/" Casks/mirin.rb
 
       - name: Commit and Push Cask changes
         if: steps.check.outputs.UPDATED == 'true'
@@ -105,5 +58,46 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/mirin.rb
-          git commit -m "Update Cask to v${{ steps.get_release.outputs.VERSION }}"
+          git commit -m "Update Mirin Cask to v${{ steps.get_release.outputs.VERSION }}"
           git push origin master
+
+  update-remotectrl:
+    if: github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+
+      - name: Fetch latest release from RemCtrl repo
+        id: get_release
+        run: |
+          RELEASE_DATA=$(curl -s https://api.github.com/repos/ganeshmshetty/RemCtrl/releases/latest)
+          VERSION_TAG=$(echo "$RELEASE_DATA" | jq -r '.tag_name')
+          VERSION=${VERSION_TAG#v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if update is needed
+        id: check
+        run: |
+          CURRENT_VERSION=$(grep -E 'version "' Casks/remotectrl.rb | sed -E 's/.*version "([^"]+)".*/\1/')
+          if [ "$CURRENT_VERSION" = "${{ steps.get_release.outputs.VERSION }}" ]; then
+            echo "UPDATED=false" >> $GITHUB_OUTPUT
+          else
+            echo "UPDATED=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Cask Version
+        if: steps.check.outputs.UPDATED == 'true'
+        run: |
+          sed -i -E "s/version \".*\"/version \"${{ steps.get_release.outputs.VERSION }}\"/" Casks/remotectrl.rb
+
+      - name: Commit and push changes
+        if: steps.check.outputs.UPDATED == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/remotectrl.rb
+          git commit -m "Bump remotectrl to ${{ steps.get_release.outputs.VERSION }}"
+          git push
