@@ -1,5 +1,5 @@
 cask "remotectrl" do
-  version "0.0.4"
+  version "null"
 
   if Hardware::CPU.intel?
     sha256 :no_check
