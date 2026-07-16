@@ -1,5 +1,5 @@
 cask "mirin" do
-  version "0.1.2"
+  version "0.2.0"
 
   if Hardware::CPU.intel?
     sha256 :no_check
