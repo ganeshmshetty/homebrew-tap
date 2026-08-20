@@ -1,6 +1,6 @@
 cask "openclip" do
   version "1.0.0"
-  sha256 "8a16f86e9a5ea48f693e5226e639d8e0f5f3baf89365e4ec5b0741e78325a314"
+  sha256 "bee720cd014f249c0014bd9b112e694f86aec341b5d5c8d38f19613927dc92cc"
 
   url "https://github.com/ganeshmshetty/openclip/releases/download/v#{version}/OpenClip-v#{version}.zip"
   name "OpenClip"
@@ -8,7 +8,7 @@ cask "openclip" do
   homepage "https://www.getopenclip.app"
 
   auto_updates true
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "OpenClip.app"
 
