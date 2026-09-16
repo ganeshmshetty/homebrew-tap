@@ -13,8 +13,8 @@ cask "openclip" do
   app "OpenClip.app"
 
   # ad-hoc signed, no Apple Developer ID yet - strip quarantine for 0 friction
-  # TODO: remove postflight after Developer ID/notarization
-  postflight do
+  # TODO: remove postflight_steps after Developer ID/notarization
+  postflight_steps do
     system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/OpenClip.app"]
   end
 
